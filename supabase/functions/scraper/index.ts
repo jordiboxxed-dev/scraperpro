@@ -45,15 +45,9 @@ serve(async (req) => {
 
     const payload = {
       url: url,
-      stealth: true,
-      blockAds: true,
       gotoOptions: {
         waitUntil: 'networkidle2',
       },
-      waitForTimeout: 3000, // Wait 3 seconds for JS to execute
-      setHeaders: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-      }
     };
 
     const browserlessResponse = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessApiKey}`, {
