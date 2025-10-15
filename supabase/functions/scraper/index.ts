@@ -46,29 +46,32 @@ serve(async (req) => {
     const puppeteerScript = `
       module.exports = async ({ page, context }) => {
         const { url } = context;
-        // Go to the page and wait for it to be fully loaded
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
+        // Go to the page and wait, with an increased timeout for slow pages
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
 
-        let lastHeight = await page.evaluate('document.body.scrollHeight');
-        const maxScrolls = 20; // Limit scrolls to prevent infinite loops
-        let scrolls = 0;
+        // This function runs entirely in the browser context for stability
+        await page.evaluate(async () => {
+          await new Promise(resolve => {
+            let lastHeight = 0;
+            let scrolls = 0;
+            const maxScrolls = 20; // Safety limit to prevent infinite loops
 
-        while (scrolls < maxScrolls) {
-          // Scroll to the bottom of the page
-          await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
-          // Wait for new content to load
-          await new Promise(resolve => setTimeout(resolve, 3000));
+            const interval = setInterval(() => {
+              const newHeight = document.body.scrollHeight;
+              // If height hasn't changed or we've scrolled too much, stop
+              if (newHeight === lastHeight || scrolls >= maxScrolls) {
+                clearInterval(interval);
+                resolve();
+              } else {
+                lastHeight = newHeight;
+                window.scrollTo(0, document.body.scrollHeight);
+                scrolls++;
+              }
+            }, 2000); // Wait 2 seconds between scrolls for content to load
+          });
+        });
 
-          let newHeight = await page.evaluate('document.body.scrollHeight');
-          if (newHeight === lastHeight) {
-            // If height hasn't changed, we've likely reached the bottom
-            break;
-          }
-          lastHeight = newHeight;
-          scrolls++;
-        }
-        
-        // Return the full page content after scrolling
+        // Return the full page content after scrolling is complete
         return await page.content();
       }
     `;
@@ -132,8 +135,6 @@ serve(async (req) => {
     })
   } catch (error) {
     console.error('Scraper function error:', error.message);
-    // Return a 200 OK status but with an error payload
-    // This ensures the detailed error message reaches the client
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
