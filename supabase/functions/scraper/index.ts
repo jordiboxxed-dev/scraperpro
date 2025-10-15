@@ -46,19 +46,21 @@ serve(async (req) => {
     const puppeteerScript = `
       module.exports = async ({ page, context }) => {
         const { url } = context;
-        // Go to the page and wait, with an increased timeout for slow pages
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+        // Go to the page and wait, with a very generous timeout for slow pages
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
 
-        // This function runs entirely in the browser context for stability
+        // This function runs entirely in the browser context for stability and performance
         await page.evaluate(async () => {
           await new Promise(resolve => {
             let lastHeight = 0;
             let scrolls = 0;
-            const maxScrolls = 20; // Safety limit to prevent infinite loops
+            // Increased max scrolls and interval for very slow-loading pages
+            const maxScrolls = 30; 
+            const scrollInterval = 3000; // 3 seconds
 
             const interval = setInterval(() => {
               const newHeight = document.body.scrollHeight;
-              // If height hasn't changed or we've scrolled too much, stop
+              
               if (newHeight === lastHeight || scrolls >= maxScrolls) {
                 clearInterval(interval);
                 resolve();
@@ -67,11 +69,11 @@ serve(async (req) => {
                 window.scrollTo(0, document.body.scrollHeight);
                 scrolls++;
               }
-            }, 2000); // Wait 2 seconds between scrolls for content to load
+            }, scrollInterval);
           });
         });
 
-        // Return the full page content after scrolling is complete
+        // Return the full page content after all scrolling is complete
         return await page.content();
       }
     `;
