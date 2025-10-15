@@ -44,12 +44,12 @@ serve(async (req) => {
     }
 
     const puppeteerScript = `
-      module.exports = async ({ page, context }) => {
-        const { url } = context;
-        // Go to the page and wait, with a very generous timeout for slow pages
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 90000 });
+      (async () => {
+        // This function runs in the browser context provided by Browserless.
+        // The 'page' object is globally available.
+        // Navigation is handled by the '/content' endpoint's 'url' parameter.
 
-        // This function runs entirely in the browser context for stability and performance
+        // This evaluate block scrolls down the page to load lazy-loaded content.
         await page.evaluate(async () => {
           await new Promise(resolve => {
             let lastHeight = 0;
@@ -73,17 +73,21 @@ serve(async (req) => {
           });
         });
 
-        // Return the full page content after all scrolling is complete
+        // Return the full page content after all scrolling is complete.
         return await page.content();
-      }
+      })();
     `;
 
     const payload = {
+      url: url,
       code: puppeteerScript,
-      context: { url },
+      gotoOptions: {
+        waitUntil: 'networkidle2',
+        timeout: 90000
+      }
     };
 
-    const browserlessResponse = await fetch(`https://production-sfo.browserless.io/function?token=${browserlessApiKey}`, {
+    const browserlessResponse = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
