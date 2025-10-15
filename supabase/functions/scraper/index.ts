@@ -40,12 +40,34 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Authentication failed' }), { status: 401, headers: corsHeaders })
     }
 
-    // Scrape the page
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    const html = await response.text();
+    // Scrape the page using Browserless.io
+    const browserlessApiKey = Deno.env.get('BROWSERLESS_API_KEY');
+    if (!browserlessApiKey) {
+      throw new Error('Browserless API key is not configured.');
+    }
+
+    const browserlessResponse = await fetch('https://chrome.browserless.io/content', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': browserlessApiKey,
+      },
+      body: JSON.stringify({
+        url: url,
+        gotoOptions: {
+          waitUntil: 'networkidle2', // Wait for network to be idle
+        },
+      }),
+    });
+
+    if (!browserlessResponse.ok) {
+      const errorBody = await browserlessResponse.text();
+      throw new Error(`Browserless API error! status: ${browserlessResponse.status}, body: ${errorBody}`);
+    }
+    
+    const html = await browserlessResponse.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
-    if (!doc) throw new Error("Failed to parse HTML");
+    if (!doc) throw new Error("Failed to parse HTML from Browserless response");
 
     const links = doc.querySelectorAll('a');
     const extractedData = [];
