@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,27 +23,60 @@ serve(async (req) => {
       })
     }
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // Create a Supabase client with the user's auth token
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization header is required' }), { status: 401, headers: corsHeaders })
     }
-    const html = await response.text();
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: authHeader } } }
+    )
 
-    const doc = new DOMParser().parseFromString(html, "text/html");
-    if (!doc) {
-      throw new Error("Failed to parse HTML");
+    // Get the user
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Authentication failed' }), { status: 401, headers: corsHeaders })
     }
+
+    // Scrape the page
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    if (!doc) throw new Error("Failed to parse HTML");
 
     const links = doc.querySelectorAll('a');
-    const extractedData: { href: string; title: string }[] = [];
-
+    const extractedData = [];
     for (const link of links) {
       const href = link.getAttribute('href');
       const title = link.textContent.trim();
-
       if (href && !href.startsWith('#') && !href.startsWith('javascript:') && title) {
         const absoluteUrl = new URL(href, url).href;
         extractedData.push({ href: absoluteUrl, title });
+      }
+    }
+
+    // Create admin client to insert data
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Prepare data for insertion
+    const linksToInsert = extractedData.map(link => ({
+      user_id: user.id,
+      scraped_url: url,
+      link_href: link.href,
+      link_title: link.title,
+    }));
+
+    if (linksToInsert.length > 0) {
+      const { error: insertError } = await supabaseAdmin.from('scraped_links').insert(linksToInsert);
+      if (insertError) {
+        console.error('DB Insert Error:', insertError);
+        throw new Error(`Database error: ${insertError.message}`);
       }
     }
 
