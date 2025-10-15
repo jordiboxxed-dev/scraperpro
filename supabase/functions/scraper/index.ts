@@ -43,14 +43,42 @@ serve(async (req) => {
       throw new Error('Browserless API key is not configured.');
     }
 
+    const puppeteerScript = `
+      async ({ page, context }) => {
+        const { url } = context;
+        // Go to the page and wait for it to be fully loaded
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
+
+        let lastHeight = await page.evaluate('document.body.scrollHeight');
+        const maxScrolls = 20; // Limit scrolls to prevent infinite loops
+        let scrolls = 0;
+
+        while (scrolls < maxScrolls) {
+          // Scroll to the bottom of the page
+          await page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
+          // Wait for new content to load
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          let newHeight = await page.evaluate('document.body.scrollHeight');
+          if (newHeight === lastHeight) {
+            // If height hasn't changed, we've likely reached the bottom
+            break;
+          }
+          lastHeight = newHeight;
+          scrolls++;
+        }
+        
+        // Return the full page content after scrolling
+        return await page.content();
+      }
+    `;
+
     const payload = {
-      url: url,
-      gotoOptions: {
-        waitUntil: 'networkidle2',
-      },
+      code: puppeteerScript,
+      context: { url },
     };
 
-    const browserlessResponse = await fetch(`https://production-sfo.browserless.io/content?token=${browserlessApiKey}`, {
+    const browserlessResponse = await fetch(`https://production-sfo.browserless.io/function?token=${browserlessApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
