@@ -44,7 +44,7 @@ serve(async (req) => {
     }
 
     const puppeteerScript = `
-      async ({ page, context }) => {
+      module.exports = async ({ page, context }) => {
         const { url } = context;
         // Go to the page and wait for it to be fully loaded
         await page.goto(url, { waitUntil: 'networkidle0', timeout: 45000 });
