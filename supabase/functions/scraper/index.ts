@@ -1,4 +1,6 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import { DOMParser } from "https://deno.land/x/deno_dom/deno-dom-wasm.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,7 +8,6 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // This is needed if you're planning to invoke your function from a browser.
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -27,7 +28,25 @@ serve(async (req) => {
     }
     const html = await response.text();
 
-    return new Response(JSON.stringify({ html }), {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    if (!doc) {
+      throw new Error("Failed to parse HTML");
+    }
+
+    const links = doc.querySelectorAll('a');
+    const extractedData: { href: string; title: string }[] = [];
+
+    for (const link of links) {
+      const href = link.getAttribute('href');
+      const title = link.textContent.trim();
+
+      if (href && !href.startsWith('#') && !href.startsWith('javascript:') && title) {
+        const absoluteUrl = new URL(href, url).href;
+        extractedData.push({ href: absoluteUrl, title });
+      }
+    }
+
+    return new Response(JSON.stringify({ data: extractedData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })

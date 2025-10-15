@@ -3,12 +3,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { showError, showSuccess, showLoading, dismissToast } from "@/utils/toast";
 import { MadeWithDyad } from "@/components/made-with-dyad";
 
+interface ScrapedLink {
+  href: string;
+  title: string;
+}
+
 const Index = () => {
   const [url, setUrl] = useState("");
-  const [scrapedContent, setScrapedContent] = useState("");
+  const [scrapedData, setScrapedData] = useState<ScrapedLink[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleScrape = async () => {
@@ -18,7 +25,7 @@ const Index = () => {
     }
 
     setIsLoading(true);
-    setScrapedContent("");
+    setScrapedData([]);
     const toastId = showLoading("Scrapeando la página...");
 
     try {
@@ -36,8 +43,8 @@ const Index = () => {
         throw new Error(data.error);
       }
 
-      setScrapedContent(data.html);
-      showSuccess("¡Página scrapeada con éxito!");
+      setScrapedData(data.data);
+      showSuccess(`¡Éxito! Se encontraron ${data.data.length} enlaces.`);
     } catch (error: any) {
       dismissToast(String(toastId));
       showError(`Error al scrapear: ${error.message}`);
@@ -71,13 +78,28 @@ const Index = () => {
               </Button>
             </div>
           </CardContent>
-          {scrapedContent && (
+          {scrapedData.length > 0 && (
             <CardFooter>
               <div className="w-full mt-4">
-                <h3 className="font-semibold mb-2">Contenido Obtenido:</h3>
-                <pre className="bg-gray-100 p-4 rounded-md text-xs overflow-auto h-64 w-full">
-                  <code>{scrapedContent}</code>
-                </pre>
+                <h3 className="font-semibold mb-2">Enlaces Encontrados:</h3>
+                <ScrollArea className="h-72 w-full rounded-md border p-4">
+                  {scrapedData.map((item, index) => (
+                    <div key={item.href + index}>
+                      <div className="text-sm text-left py-2">
+                        <p className="font-medium truncate" title={item.title}>{item.title}</p>
+                        <a
+                          href={item.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline text-xs truncate block"
+                        >
+                          {item.href}
+                        </a>
+                      </div>
+                      {index < scrapedData.length - 1 && <Separator />}
+                    </div>
+                  ))}
+                </ScrollArea>
               </div>
             </CardFooter>
           )}
