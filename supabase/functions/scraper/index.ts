@@ -46,11 +46,10 @@ serve(async (req) => {
       throw new Error('Browserless API key is not configured.');
     }
 
-    const browserlessResponse = await fetch('https://chrome.browserless.io/content', {
+    const browserlessResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-KEY': browserlessApiKey,
       },
       body: JSON.stringify({
         url: url,
