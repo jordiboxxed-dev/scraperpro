@@ -17,16 +17,13 @@ serve(async (req) => {
     const { url } = await req.json()
 
     if (!url) {
-      return new Response(JSON.stringify({ error: 'URL is required' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      })
+      throw new Error('URL is required');
     }
 
     // Create a Supabase client with the user's auth token
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Authorization header is required' }), { status: 401, headers: corsHeaders })
+      throw new Error('Authorization header is required');
     }
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -37,7 +34,7 @@ serve(async (req) => {
     // Get the user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: 'Authentication failed' }), { status: 401, headers: corsHeaders })
+      throw new Error('Authentication failed');
     }
 
     // Scrape the page using Browserless.io
@@ -46,22 +43,28 @@ serve(async (req) => {
       throw new Error('Browserless API key is not configured.');
     }
 
+    const payload = {
+      url: url,
+      stealth: true,
+      blockAds: true,
+      gotoOptions: {
+        waitUntil: 'networkidle2',
+      },
+      waitForTimeout: 3000, // Wait 3 seconds for JS to execute
+      setHeaders: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+      }
+    };
+
     const browserlessResponse = await fetch(`https://chrome.browserless.io/content?token=${browserlessApiKey}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url,
-        gotoOptions: {
-          waitUntil: 'networkidle2', // Wait for network to be idle
-        },
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
 
     if (!browserlessResponse.ok) {
       const errorBody = await browserlessResponse.text();
-      throw new Error(`Browserless API error! status: ${browserlessResponse.status}, body: ${errorBody}`);
+      throw new Error(`Browserless API Error (Status: ${browserlessResponse.status}): ${errorBody}`);
     }
     
     const html = await browserlessResponse.text();
@@ -106,9 +109,12 @@ serve(async (req) => {
       status: 200,
     })
   } catch (error) {
+    console.error('Scraper function error:', error.message);
+    // Return a 200 OK status but with an error payload
+    // This ensures the detailed error message reaches the client
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
+      status: 200,
     })
   }
 })
