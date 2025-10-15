@@ -26,7 +26,7 @@ const Index = () => {
         body: { url },
       });
 
-      dismissToast(toastId);
+      dismissToast(String(toastId));
 
       if (error) {
         throw error;
@@ -39,7 +39,7 @@ const Index = () => {
       setScrapedContent(data.html);
       showSuccess("¡Página scrapeada con éxito!");
     } catch (error: any) {
-      dismissToast(toastId);
+      dismissToast(String(toastId));
       showError(`Error al scrapear: ${error.message}`);
       console.error(error);
     } finally {
